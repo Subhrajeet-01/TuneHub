@@ -7,6 +7,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langsmith import traceable
 from app.agents.state import AgentState
 from app.tools.music_search import music_search_tool
+from app.tools.mood_analyser import mood_analyzer_tool
+from app.tools.playlist_builder import playlist_builder_tool
 from app.config import get_settings
 
 settings = get_settings()
@@ -23,7 +25,7 @@ llm_with_tools = llm.bind_tools([music_search_tool])
 
 #Node 1: Planner
 
-@traceable("tool")
+# @traceable("tool")
 def planner_node(state: AgentState) -> dict:
     """LLM decide What to do based on Query."""
     
@@ -52,7 +54,7 @@ def planner_node(state: AgentState) -> dict:
     }
 
 #Node2: Search Tool Node
-@traceable("chain")
+# @traceable("chain")
 def tool_node(state: AgentState) -> dict:
     """Execute whatever tools the planner requested."""
     from langgraph.prebuilt import ToolNode
@@ -60,21 +62,44 @@ def tool_node(state: AgentState) -> dict:
     last_message = state["messages"][-1]
     tool_result = []
 
+    #step 1
     for tool_call in last_message.tool_calls:
         if tool_call["name"] == "music_search_tool":
             result = music_search_tool.invoke(tool_call["args"])
             tool_result.extend(result)
 
     state["search_results"] = state["search_results"] + tool_result
-    state["reasoning_trace"] = state["reasoning_trace"].extend([f"Tools returned {len(tool_result)} results."])
+
+    #step 2
+    query_text = state["messages"][0].content
+    mood_results = mood_analyzer_tool.invoke({
+        "tracks": state["search_results"],
+        "target_mood": query_text
+    })
+
+    #step 3
+    final_playlist = playlist_builder_tool.invoke({
+        "tracks": mood_results,
+        "venue_type": state["venue_context"]["venue_type"],
+        "energy_preference": state["venue_context"]["energy_preference"],
+        "limit": 8
+    })
+
+    state["reasoning_trace"] = state["reasoning_trace"].extend([
+        f"Search: {len(tool_result)} tracks -> "
+        f"Mood Filter -> "
+        f"Playlist: {len(final_playlist)} tracks"
+        ])
+
     return {
         "search_results": state["search_results"],
-        "resoning_trace": state["reasoning_trace"]
+        "final_playlist": final_playlist,
+        "resoning_trace": state["reasoning_trace"] 
     }
     
 
 #Node3: Synthesizer Node
-@traceable("llm")
+# @traceable("llm")
 def synthesizer_node(state: AgentState) -> dict:
     """Turn raw tool results into a final playlist."""
     
@@ -103,7 +128,7 @@ def synthesizer_node(state: AgentState) -> dict:
     }
 
 #---Routing Logic---
-@traceable("tool")
+# @traceable("tool")
 def should_use_tools(state: AgentState) -> str:
     """check if last message has tool calls."""
     last_message = state["messages"][-1]

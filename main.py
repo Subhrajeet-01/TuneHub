@@ -5,12 +5,12 @@ from app.agents.state import AgentState
 from langchain_core.messages import HumanMessage
 
 initial_state: AgentState = {
-    "messages": [HumanMessage(content="I need upbeat morning music for a coffee shop")],
+    "messages": [HumanMessage(content="intense workout music for a gym")],
     "session_id": "test_session_001",
     "venue_context": {
-        "venue_type": "cafe",
-        "time_of_day": "morning",
-        "energy_preference": "medium",
+        "venue_type": "gym",
+        "time_of_day": "afternoon",
+        "energy_preference": "high",
         "session_duration": 120
     },
     "search_results": [],
