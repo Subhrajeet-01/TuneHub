@@ -28,7 +28,7 @@ class AgentState(TypedDict):
     #Tools Output
     search_results: list[Trackresult]
     mood_score: dict[str, float]
-    final_palylist: list[Trackresult]
+    final_playlist: list[Trackresult]
 
     #Agent Reasoning
     plan: str
@@ -37,3 +37,8 @@ class AgentState(TypedDict):
     #control_flow
     next_step: str
     error: Optional[str]
+
+    #memory
+    memory_context: dict
+    session_updated: bool
+

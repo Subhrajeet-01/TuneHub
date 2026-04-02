@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
 
+    #Redis
+    redis_url: str = "redis://localhost:6379"
+
+    #chromadb
+    chroma_persist_dir: str = "./chroma_db"
+
 
 @lru_cache()
 def get_settings() -> Settings:

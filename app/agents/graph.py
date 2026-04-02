@@ -9,6 +9,8 @@ from app.agents.state import AgentState
 from app.tools.music_search import music_search_tool
 from app.tools.mood_analyser import mood_analyzer_tool
 from app.tools.playlist_builder import playlist_builder_tool
+from app.memory.session import SessionMemory
+from app.memory.semantic import SemanticMemory
 from app.config import get_settings
 
 settings = get_settings()
@@ -24,15 +26,27 @@ llm = ChatGroq(
 llm_with_tools = llm.bind_tools([music_search_tool])
 
 #Node 1: Planner
-
-# @traceable("tool")
 def planner_node(state: AgentState) -> dict:
     """LLM decide What to do based on Query."""
+    memory = state.get("memory_context", {})
+    preferences = memory.get("preferences", {})
+    history = memory.get("history", [])
+
+    # Build Memory context string for prompt
+    memory_str = ""
+    if preferences:
+        memory_str += f"\nKnown Preferences: {preferences}"
+    if history:
+        last = history[-1]
+        memory_str += f"\nLast Query was: '{last.get('query', '')}'"
+        memory_str += f"\nLast playlist included tracks: {last.get('playlist_ids', [])}"
     
-    system_prompt = """You are Music Mind, an expert music curator for business venues.
+    system_prompt = f"""You are Music Mind, an expert music curator for business venues.
     
-    Given a query and venue context, use the music_search_tool to find appropriate tracks.
-    Always call the tool — never respond without searching first.
+    IMPORTANT: You MUST always call the music_search_tool before responding.
+    Never generate a playlist from memory alone — always search first.
+    Even for follow-up or refinement queries, always call the tool with updated parameters.
+    {memory_str}
     
     Think step by step.
     1. What genre fits this venue and time of day?
@@ -54,7 +68,6 @@ def planner_node(state: AgentState) -> dict:
     }
 
 #Node2: Search Tool Node
-# @traceable("chain")
 def tool_node(state: AgentState) -> dict:
     """Execute whatever tools the planner requested."""
     from langgraph.prebuilt import ToolNode
@@ -99,7 +112,6 @@ def tool_node(state: AgentState) -> dict:
     
 
 #Node3: Synthesizer Node
-# @traceable("llm")
 def synthesizer_node(state: AgentState) -> dict:
     """Turn raw tool results into a final playlist."""
     
@@ -127,8 +139,92 @@ def synthesizer_node(state: AgentState) -> dict:
         "reasoning_trace": state["reasoning_trace"] + ["Synthesizer completed."]
     }
 
+#Node 4: Memory Node
+def memory_load_node(state: AgentState) -> dict:
+    """
+    First node - runs before planning.
+    Loads session history from redis and injects into state for context.
+    """
+    session_id = state["session_id"]
+    query = state["messages"][0].content
+    venue_type = state["venue_context"]["venue_type"]
+
+    # Redis
+    session_context = SessionMemory.get(session_id)
+
+    #chromadb
+    similar_playlists = SemanticMemory.retrieve_similar(
+        query=query,
+        venue_type=venue_type,
+        top_k=3
+    )
+    
+    reasoning = []
+    if session_context["history"]:
+        reasoning.append(
+            f"Redis: {len(session_context['history'])} past interactions loaded"
+        )
+    else:
+        reasoning.append("Redis: no past interactions found for this session")
+
+    if similar_playlists:
+        reasoning.append(
+            f"ChromaDB: {len(similar_playlists)} similar playlists retrieved"
+        )
+    else:
+        reasoning.append("ChromaDB: no similar playlists found yet")
+
+    return {
+        "memory_context": {
+            **session_context,
+            "similar_playlists": similar_playlists
+        },
+        "reasoning_trace": state["reasoning_trace"] + [reasoning]
+    }
+
+#Node 5: Memory Save Node
+def memory_save_node(state: AgentState) -> dict:
+    """
+    Last node - runs after synthesizer.
+    Saves relevant context back to Redis for future sessions.
+    Save the similar playlist as an embedding in chromadb for future retrieval.
+    """ 
+    import uuid
+
+    session_id = state["session_id"]
+    track_ids = [t["id"] for t in state["final_playlist"]]
+
+    # save to Redis
+    interaction = {
+        "query": state["messages"][0].content,
+        "venue_type": state["venue_context"]["venue_type"],
+        "playlist_ids": [track["id"] for track in state["final_playlist"]],
+        "preferences": {
+            "energy": state["venue_context"]["energy_preference"],
+            "venue_type": state["venue_context"]["venue_type"]
+        }
+    }
+
+    SessionMemory.update(session_id, interaction)
+
+    # save to ChromaDB
+    SemanticMemory.store_playlist(
+        playlist_id = f"pl_{uuid.uuid4().hex[:8]}",
+        query = state["messages"][0].content,
+        venue_type = state["venue_context"]["venue_type"],
+        track_ids = track_ids,
+        energy = state["venue_context"]["energy_preference"]
+    )
+
+    return {
+        
+        "reasoning_trace": state["reasoning_trace"] + [
+            f"Memory saved to Redis: {SessionMemory.count()} interactions stored.",
+            f"ChromaDB updated with new playlist embedding. Total stored Playlists: {SemanticMemory.count()}"
+        ]
+    }
+
 #---Routing Logic---
-# @traceable("tool")
 def should_use_tools(state: AgentState) -> str:
     """check if last message has tool calls."""
     last_message = state["messages"][-1]
@@ -136,18 +232,21 @@ def should_use_tools(state: AgentState) -> str:
         return "tool"
     return "synthesizer"
 
-#---Build Graph---
 
+#---Build Graph---
 def build_graph():
     graph = StateGraph(AgentState)
 
     #Add Nodes
+    graph.add_node("memory_load", memory_load_node)
     graph.add_node("planner", planner_node)
     graph.add_node("tool", tool_node)
     graph.add_node("synthesizer", synthesizer_node)
+    graph.add_node("memory_save", memory_save_node)
 
     #Add Edges
-    graph.set_entry_point("planner")
+    graph.set_entry_point("memory_load")
+    graph.add_edge("memory_load", "planner")
     graph.add_conditional_edges(
         "planner",
         should_use_tools,
@@ -157,7 +256,8 @@ def build_graph():
         }
     )
     graph.add_edge("tool", "synthesizer")
-    graph.add_edge("synthesizer", END)
+    graph.add_edge("synthesizer", "memory_save")
+    graph.add_edge("memory_save", END)
 
     return graph.compile()
 

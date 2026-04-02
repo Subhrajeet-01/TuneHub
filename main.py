@@ -1,31 +1,38 @@
-# delete this after testing, it's just for smoke testing
 
 from app.agents.graph import build_graph
 from app.agents.state import AgentState
 from langchain_core.messages import HumanMessage
 
-initial_state: AgentState = {
-    "messages": [HumanMessage(content="intense workout music for a gym")],
-    "session_id": "test_session_001",
-    "venue_context": {
-        "venue_type": "gym",
-        "time_of_day": "afternoon",
-        "energy_preference": "high",
-        "session_duration": 120
-    },
-    "search_results": [],
-    "mood_scores": {},
-    "final_playlist": [],
-    "plan": "",
-    "reasoning_trace": [],
-    "memory_context": [],
-    "next_step": "",
-    "error": None
-}
-agent = build_graph()
-result = agent.invoke(initial_state)
-print(result["messages"][-1].content)
+queries = [
+    ("upbeat morning music for cafe",       "cafe",  "morning",   "medium"),
+    ("energetic gym workout playlist",      "gym",   "afternoon", "high"),
+    ("calm spa relaxation music",           "spa",   "evening",   "low"),
+    ("cheerful coffee shop morning vibes",   "cafe",  "morning",   "medium"),  # This last one should retrieve the first query from ChromaDB
+]
 
+agent = build_graph()
+for i, (query, venue, time, energy) in enumerate(queries):
+    state: AgentState = {
+        "messages": [HumanMessage(query)],
+        "session_id": f"test_session_{i}",
+        "venue_context": {
+            "venue_type": venue,
+            "time_of_day": time,
+            "energy_preference": energy,
+            "session_duration": 120,
+        },
+        "search_results": [], "mood_scores": {}, "final_playlist": [],
+        "plan": "", "reasoning_trace": [], "memory_context": {},
+        "next_step": "", "error": None, "session_updated": False
+    }
+
+    result = agent.invoke(state)
+    print(f"\n{'='*50}")
+    print(f"Query: {query}")
+    print(f"Reasoning trace:")
+    for step in result["reasoning_trace"]:
+        print(f"  → {step}")
+    print(f"Playlist: {[t['title'] for t in result['final_playlist']]}")
 
 if __name__ == "__main__":
     pass

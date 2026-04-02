@@ -39,13 +39,12 @@ def music_search_tool(
     results = []
 
     for track in _ALL_TRACKS:
-        if genre.lower() != track["genre"].lower():
-            continue
         if track["energy"] != energy_level:
             continue
         if not (bpm_min <= track["bpm"] <= bpm_max):
             continue
-        results.append(track)
+        if genre.lower() in track["genre"].lower():
+            results.append(track)
     
     # If Filter is Too Strict. Relax mood tags
 
@@ -55,5 +54,8 @@ def music_search_tool(
             if t["energy"] == energy_level 
             and bpm_min <= t["bpm"] <= bpm_max
         ]
+
+    if len(results) == 0:
+        results = [t for t in _ALL_TRACKS if t["energy"] == energy_level]
 
     return results[:limits]

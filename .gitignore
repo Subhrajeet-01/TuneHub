@@ -11,4 +11,6 @@ wheels/
 
 .env
 
+# Logs and databases
+chroma_db/
 experiment.py
