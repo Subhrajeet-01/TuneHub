@@ -14,7 +14,7 @@ class VenueContextSchema(BaseModel):
 
 class RecommendRequest(BaseModel):
     query: str = Field(
-        min_lenght = 3,
+        min_length = 3,
         max_length= 500,
         description="User's natural language query describing their music needs and context",
         examples=["upbeat morning music for cafe", "energetic gym workout playlist", "calm spa relaxation music"]
