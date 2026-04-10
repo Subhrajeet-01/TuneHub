@@ -1,0 +1,4 @@
+query,venue_type,helpfulness,mood_match,venue_fit,reasoning,track_count
+upbeat morning music for coffee shop,cafe,5,5,4,"The playlist is highly helpful and matches the expected mood with its high-energy and upbeat tracks, but may be slightly too intense for a cafe setting, which might prefer a more subdued atmosphere.",8
+intense workout playlist for gym,gym,5,5,5,"The recommended playlist perfectly matches the query intent, expected mood, and venue, as it consists of high-energy songs with fast BPM, making it ideal for an intense workout playlist in a gym.",8
+relaxing spa background music,spa,5,5,5,"The recommended playlist perfectly matches the query intent, expected mood, and venue, as it consists of low-energy and low-BPM songs with calming and peaceful themes, making it highly suitable for a spa background.",7

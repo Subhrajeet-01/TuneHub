@@ -5,7 +5,7 @@ Run separately: pytest tests/evals/ -v
 import pytest
 import csv
 import os
-import datetime
+from datetime import datetime
 from app.agents.graph import build_graph
 from app.agents.state import AgentState
 from langchain_core.messages import HumanMessage
