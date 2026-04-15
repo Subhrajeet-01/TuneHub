@@ -1,11 +1,10 @@
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+from fastembed import TextEmbedding
 import numpy as np
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 print("Loading Mood Analyser Model...")
-_MODEL = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+_MODEL = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
 print("Model Loaded.")
 
 _MOOD_ANCHORS = {
@@ -17,11 +16,21 @@ _MOOD_ANCHORS = {
     "melancholic": "sad reflective nostalgic longing bittersweet",
 }
 
-# Pre-compute anchor embeddings once
+def _embed(text: str):
+    return list(_MODEL.embed([text]))[0]
+
 _ANCHOR_EMBEDDINGS = {
-    mood: _MODEL.encode([desc])[0]
+    mood: _embed(desc)
     for mood, desc in _MOOD_ANCHORS.items()
 }
+
+# cosine similarity - just compute manually:
+def _cosine_sim(a, b) -> float:
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+# TextEmbedding returns generator, so we need a helper to get single embedding out easily
+def embed_one(model, text):
+    return next(model.embed([text]))
 
 class MoodAnalyzerInput(BaseModel):
     tracks: list[dict] = Field(description="List of tracks dicts with mood_tags field") 
@@ -32,7 +41,7 @@ def mood_analyzer_tool(tracks: list[dict], target_mood: str) -> list[dict]:
     """Score tracks based on how well their mood_tags match the target mood."""
     
     if target_mood not in _ANCHOR_EMBEDDINGS:
-        target_embedding = _MODEL.encode([target_mood])[0]
+        target_embedding = embed_one(_MODEL, target_mood)
     else:
         target_embedding = _ANCHOR_EMBEDDINGS[target_mood]
 
@@ -42,12 +51,9 @@ def mood_analyzer_tool(tracks: list[dict], target_mood: str) -> list[dict]:
         if not mood_text:
             mood_text = f"{track.get('genre', '')} {track.get('energy', '')}"
         
-        track_embedding = _MODEL.encode([mood_text])[0]
+        track_embedding = embed_one(_MODEL, mood_text)
 
-        score = cosine_similarity(
-            target_embedding.reshape(1, -1),
-            track_embedding.reshape(1, -1)
-        )[0][0]
+        score = _cosine_sim(target_embedding, track_embedding)
 
         scored_tracks.append({
             **track,

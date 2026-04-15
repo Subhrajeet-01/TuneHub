@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    
+    env_file:
+      - .env
+
+    container_name: musicmind-app
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      # API Keys
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
+
+      # LangChain config (FIXED spacing issue)
+      LANGCHAIN_TRACING_V2: ${LANGCHAIN_TRACING_V2:-true}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT}
+
+      #groq config
+      GROQ_API_KEY: ${GROQ_API_KEY}
+
+      # Internal services
+      REDIS_URL: redis://redis:6379
+
+      # App config
+      APP_ENV: production
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+
+      # ChromaDB persistence
+      CHROMA_DB_DIR: /app/chroma_db
+
+    volumes:
+      - chroma_data:/app/chroma_db
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    # Ensures proper startup order handling
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: musicmind-redis
+
+    ports:
+      - "6379:6379"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+    # Optional persistence (recommended for production)
+    volumes:
+      - redis_data:/data
+
+
+# Named volumes
+volumes:
+  chroma_data:
+  redis_data:

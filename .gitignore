@@ -14,3 +14,6 @@ wheels/
 # Logs and databases
 chroma_db/
 experiment.py
+
+#docker
+docker/.env

@@ -1,13 +1,11 @@
 import chromadb
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
 from app.config import get_settings
 
 settings = get_settings()
 
 # Embedding function using SentenceTransformer same madel as Mood Analyzer for consistency
-_embedding_fn = SentenceTransformerEmbeddingFunction(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+_embedding_fn = ONNXMiniLM_L6_V2()
 
 # persistent chroma client
 _client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
