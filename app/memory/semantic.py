@@ -4,7 +4,6 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Embedding function using SentenceTransformer same madel as Mood Analyzer for consistency
 _embedding_fn = ONNXMiniLM_L6_V2()
 
 # persistent chroma client
